@@ -22,6 +22,7 @@
 # SOFTWARE.
 import numpy as np
 from kiss_icp.kiss_icp import KissICP
+from kiss_icp.scan import coerce_scan
 from kiss_icp.voxelization import voxel_down_sample
 
 from kiss_slam.config import KissSLAMConfig
@@ -58,8 +59,8 @@ class KissSLAM:
     def get_keyposes(self):
         return list(self.local_map_graph.keyposes())
 
-    def process_scan(self, frame, timestamps):
-        deskewed_frame, _ = self.odometry.register_frame(frame, timestamps)
+    def process_scan(self, scan):
+        deskewed_frame, _ = self.odometry.register_frame(coerce_scan(scan))
         current_pose = self.odometry.last_pose
         mapping_frame = voxel_down_sample(deskewed_frame, self.local_map_voxel_size)
         self.voxel_grid.integrate_frame(mapping_frame, current_pose)
@@ -84,12 +85,12 @@ class KissSLAM:
             self.local_map_graph[id_].keypose = np.copy(pose)
 
     def generate_new_node(self):
-        points = self.odometry.local_map.point_cloud()
+        local_map_scan = self.odometry.local_map.point_cloud_with_intensity()
         # Reset odometry
         last_local_map = self.local_map_graph.last_local_map
         relative_motion = last_local_map.local_trajectory[-1]
         inverse_relative_motion = np.linalg.inv(relative_motion)
-        transformed_local_map = transform_points(points, inverse_relative_motion)
+        transformed_local_map = local_map_scan.transform(inverse_relative_motion)
 
         self.odometry.local_map.clear()
         self.odometry.local_map.add_points(transformed_local_map)

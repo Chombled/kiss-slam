@@ -27,6 +27,7 @@ from typing import Optional
 
 import numpy as np
 from kiss_icp.pipeline import OdometryPipeline
+from kiss_icp.scan import coerce_scan
 from tqdm import tqdm, trange
 
 from kiss_slam.config import load_config
@@ -70,9 +71,9 @@ class SlamPipeline(OdometryPipeline):
 
     def _run_pipeline(self):
         for idx in trange(self._first, self._last, unit=" frames", dynamic_ncols=True):
-            scan, timestamps = self._next(idx)
+            scan = self._next(idx)
             start_time = time.perf_counter_ns()
-            self.kiss_slam.process_scan(scan, timestamps)
+            self.kiss_slam.process_scan(scan)
             self.times[idx - self._first] = time.perf_counter_ns() - start_time
             self.visualizer.update(self.kiss_slam)
         self.kiss_slam.generate_new_node()
@@ -98,10 +99,10 @@ class SlamPipeline(OdometryPipeline):
             occupancy_grid_mapper = OccupancyGridMapper(self.slam_config.occupancy_mapper)
             print("KissSLAM| Computing Occupancy Grid")
             for idx in trange(self._first, self._last, unit=" frames", dynamic_ncols=True):
-                scan, timestamps = self._next(idx)
-                deskewed_scan = preprocessor.preprocess(scan, timestamps, deskewing_deltas[idx])
+                scan = self._next(idx)
+                deskewed_scan = preprocessor.preprocess(scan, deskewing_deltas[idx])
                 occupancy_grid_mapper.integrate_frame(
-                    deskewed_scan, ref_ground_alignment @ self.poses[idx - self._first]
+                    deskewed_scan.points, ref_ground_alignment @ self.poses[idx - self._first]
                 )
             occupancy_grid_mapper.compute_3d_occupancy_information()
             occupancy_grid_mapper.compute_2d_occupancy_information()
@@ -151,6 +152,4 @@ class SlamPipeline(OdometryPipeline):
         self.pose_graph.write_graph(os.path.join(self.results_dir, "trajectory.g2o"))
 
     def _next(self, idx):
-        dataframe = self._dataset[idx]
-        frame, timestamps = dataframe
-        return frame, timestamps
+        return coerce_scan(self._dataset[idx])

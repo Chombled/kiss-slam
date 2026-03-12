@@ -66,9 +66,23 @@ PYBIND11_MODULE(kiss_slam_pybind, m) {
 
     py::class_<VoxelMap> internal_map(m, "_VoxelMap", "Don't use this");
     internal_map.def(py::init<float>(), "voxel_size"_a)
-        .def("_integrate_frame", &VoxelMap::IntegrateFrame, "points"_a, "pose"_a)
-        .def("_add_points", &VoxelMap::AddPoints, "points"_a)
+        .def("_integrate_frame",
+             py::overload_cast<const std::vector<Eigen::Vector3f> &, const Eigen::Matrix4f &>(
+                 &VoxelMap::IntegrateFrame),
+             "points"_a, "pose"_a)
+        .def("_integrate_frame",
+             py::overload_cast<const std::vector<Eigen::Vector3f> &, const std::vector<float> &,
+                               const Eigen::Matrix4f &>(&VoxelMap::IntegrateFrame),
+             "points"_a, "intensities"_a, "pose"_a)
+        .def("_add_points",
+             py::overload_cast<const std::vector<Eigen::Vector3f> &>(&VoxelMap::AddPoints),
+             "points"_a)
+        .def("_add_points",
+             py::overload_cast<const std::vector<Eigen::Vector3f> &, const std::vector<float> &>(
+                 &VoxelMap::AddPoints),
+             "points"_a, "intensities"_a)
         .def("_point_cloud", &VoxelMap::Pointcloud)
+        .def("_point_cloud_with_intensity", &VoxelMap::PointcloudWithIntensity)
         .def("_clear", &VoxelMap::Clear)
         .def("_num_voxels", &VoxelMap::NumVoxels)
         .def("_per_voxel_point_and_normal", &VoxelMap::PerVoxelPointAndNormal);

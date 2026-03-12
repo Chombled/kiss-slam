@@ -45,12 +45,19 @@ static constexpr unsigned int max_points_per_normal_computation = 20;
 
 namespace voxel_map {
 
+struct PointSample {
+    Eigen::Vector3f point = Eigen::Vector3f::Zero();
+    float intensity = 0.0F;
+    bool has_intensity = false;
+};
+
 struct VoxelBlock {
     void emplace_back(const Eigen::Vector3f &point);
+    void emplace_back(const Eigen::Vector3f &point, float intensity);
     inline constexpr size_t size() const { return num_points; }
     auto cbegin() const { return points.cbegin(); }
     auto cend() const { return std::next(points.cbegin(), num_points); }
-    std::array<Eigen::Vector3f, max_points_per_normal_computation> points;
+    std::array<PointSample, max_points_per_normal_computation> points;
     size_t num_points = 0;
 };
 
@@ -60,12 +67,16 @@ struct VoxelMap {
     inline void Clear() { map_.clear(); }
     inline bool Empty() const { return map_.empty(); }
     void IntegrateFrame(const std::vector<Eigen::Vector3f> &points, const Eigen::Matrix4f &pose);
+    void IntegrateFrame(const std::vector<Eigen::Vector3f> &points, const std::vector<float> &intensities,
+                        const Eigen::Matrix4f &pose);
     void AddPoints(const std::vector<Eigen::Vector3f> &points);
+    void AddPoints(const std::vector<Eigen::Vector3f> &points, const std::vector<float> &intensities);
     Vector3fVector Pointcloud() const;
+    std::tuple<Vector3fVector, std::vector<float>> PointcloudWithIntensity() const;
 
     size_t NumVoxels() const { return map_.size(); }
 
-    std::tuple<Vector3fVector, Vector3fVector> PerVoxelPointAndNormal() const;
+    std::tuple<Vector3fVector, Vector3fVector, std::vector<float>> PerVoxelPointAndNormal() const;
 
     float voxel_size_;
     float map_resolution_;
