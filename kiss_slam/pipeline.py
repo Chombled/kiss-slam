@@ -144,7 +144,7 @@ class SlamPipeline(OdometryPipeline):
                 scan = self._next(idx)
                 deskewed_scan = preprocessor.preprocess(scan, deskewing_deltas[idx])
                 occupancy_grid_mapper.integrate_frame(
-                    deskewed_scan.points, ref_ground_alignment @ self.poses[idx - self._first]
+                    deskewed_scan, ref_ground_alignment @ self.poses[idx - self._first]
                 )
             occupancy_grid_mapper.compute_3d_occupancy_information()
             occupancy_grid_mapper.compute_2d_occupancy_information()

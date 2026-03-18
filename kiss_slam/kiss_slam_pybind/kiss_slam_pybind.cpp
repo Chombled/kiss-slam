@@ -89,8 +89,17 @@ PYBIND11_MODULE(kiss_slam_pybind, m) {
 
     py::class_<OccupancyMapper> grid_mapper(m, "_OccupancyMapper", "Don't use this");
     grid_mapper.def(py::init<float>(), "resolution"_a)
-        .def("_integrate_frame", &OccupancyMapper::IntegrateFrame, "pointcloud"_a, "pose"_a)
+        .def("_integrate_frame",
+             py::overload_cast<const std::vector<Eigen::Vector3f> &, const Eigen::Matrix4f &>(
+                 &OccupancyMapper::IntegrateFrame),
+             "pointcloud"_a, "pose"_a)
+        .def("_integrate_frame",
+             py::overload_cast<const std::vector<Eigen::Vector3f> &, const std::vector<float> &,
+                               const Eigen::Matrix4f &>(&OccupancyMapper::IntegrateFrame),
+             "pointcloud"_a, "intensities"_a, "pose"_a)
         .def("_get_active_voxels", &OccupancyMapper::GetOccupancyInformation)
         .def("_get_occupied_voxels", &OccupancyMapper::GetOccupiedVoxels, "probability_threshold"_a)
+        .def("_get_occupied_voxels_with_intensity", &OccupancyMapper::GetOccupiedVoxelsWithIntensity,
+             "probability_threshold"_a)
         .def("_save_occupancy_volume", &OccupancyMapper::SaveOccupancyVolume, "filename"_a);
 }

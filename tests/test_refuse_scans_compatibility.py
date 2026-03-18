@@ -4,17 +4,12 @@ import numpy as np
 import pytest
 
 import kiss_slam.pipeline as pipeline_module
+from kiss_icp.scan import LidarScan
 from kiss_slam.pipeline import (
     MAP_CLOSURES_RELEASE_FLOOR,
     RefuseScansCompatibilityError,
     SlamPipeline,
 )
-
-
-class _Scan:
-    def __init__(self, points):
-        self.points = points
-
 
 class _Dataset:
     def __init__(self, scans):
@@ -72,7 +67,7 @@ def test_global_mapping_integrates_frames_when_ground_alignment_api_exists(monke
             OccupancyMapper.last_instance = self
 
         def integrate_frame(self, frame, pose):
-            self.integrated.append((frame.copy(), pose.copy()))
+            self.integrated.append((frame, pose.copy()))
 
         def compute_3d_occupancy_information(self):
             self.computed_3d = True
@@ -88,8 +83,16 @@ def test_global_mapping_integrates_frames_when_ground_alignment_api_exists(monke
 
     dataset = _Dataset(
         [
-            _Scan(np.array([[0.0, 0.0, 0.0]], dtype=np.float64)),
-            _Scan(np.array([[1.0, 0.0, 0.0]], dtype=np.float64)),
+            LidarScan(
+                points=np.array([[0.0, 0.0, 0.0]], dtype=np.float64),
+                timestamps=np.array([]),
+                intensities=np.array([1.0], dtype=np.float32),
+            ),
+            LidarScan(
+                points=np.array([[1.0, 0.0, 0.0]], dtype=np.float64),
+                timestamps=np.array([]),
+                intensities=np.array([2.0], dtype=np.float32),
+            ),
         ]
     )
     preprocessor = Preprocessor()
@@ -121,6 +124,9 @@ def test_global_mapping_integrates_frames_when_ground_alignment_api_exists(monke
     assert dataset.reset_calls == 1
     assert len(preprocessor.calls) == 2
     assert len(mapper.integrated) == 2
+    assert all(frame.has_intensity for frame, _ in mapper.integrated)
+    assert np.allclose(mapper.integrated[0][0].intensities, [1.0])
+    assert np.allclose(mapper.integrated[1][0].intensities, [2.0])
     assert mapper.computed_3d is True
     assert mapper.computed_2d is True
     assert mapper.written_3d == str(tmp_path / "occupancy_grid")

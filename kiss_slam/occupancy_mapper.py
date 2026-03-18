@@ -25,6 +25,7 @@ import os
 import numpy as np
 import open3d as o3d
 import yaml
+from kiss_icp.scan import coerce_scan
 from kiss_icp.voxelization import voxel_down_sample
 from PIL import Image
 
@@ -40,25 +41,39 @@ class OccupancyGridMapper:
         self.config = config
         self.occupancy_mapping_pipeline = kiss_slam_pybind._OccupancyMapper(self.config.resolution)
 
-    def integrate_frame(self, frame: np.ndarray, pose: np.ndarray):
-        frame_downsampled = voxel_down_sample(frame, self.config.resolution).astype(np.float32)
-        self.occupancy_mapping_pipeline._integrate_frame(
-            kiss_slam_pybind._Vector3fVector(frame_downsampled), pose
+    def integrate_frame(self, frame, pose: np.ndarray):
+        scan = coerce_scan(frame, timestamps=np.array([]))
+        frame_downsampled = voxel_down_sample(scan, self.config.resolution)
+        downsampled_points = kiss_slam_pybind._Vector3fVector(
+            frame_downsampled.points.astype(np.float32)
         )
+        if frame_downsampled.has_intensity:
+            self.occupancy_mapping_pipeline._integrate_frame(
+                downsampled_points,
+                frame_downsampled.intensities.astype(np.float32),
+                pose,
+            )
+        else:
+            self.occupancy_mapping_pipeline._integrate_frame(downsampled_points, pose)
 
     def compute_3d_occupancy_information(self):
         active_voxels, occupancies = self.occupancy_mapping_pipeline._get_active_voxels()
         self.active_voxels = np.asarray(active_voxels, np.int32)
         self.occupancies = np.asarray(occupancies, float)
-        self.occupied_voxels = self.active_voxels[
-            np.where(self.occupancies > self.config.occupied_threshold)[0]
-        ]
+        occupied_voxels, occupied_intensities = (
+            self.occupancy_mapping_pipeline._get_occupied_voxels_with_intensity(
+                self.config.occupied_threshold
+            )
+        )
+        self.occupied_voxels = np.asarray(occupied_voxels, np.int32)
+        self.occupied_voxel_intensities = np.asarray(occupied_intensities, dtype=np.float32)
 
     def compute_3d_occupied_voxels(self):
         occupied_voxels = self.occupancy_mapping_pipeline._get_occupied_voxels(
             self.config.occupied_threshold
         )
         self.occupied_voxels = np.asarray(occupied_voxels, np.int32)
+        self.occupied_voxel_intensities = np.array([], dtype=np.float32)
 
     def compute_2d_occupancy_information(self):
         min_z_idx = int(self.config.z_min // self.config.resolution)
@@ -83,9 +98,28 @@ class OccupancyGridMapper:
 
     def write_3d_occupancy_grid(self, output_dir):
         map_points = (0.5 + self.occupied_voxels) * self.config.resolution
-        o3d_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(map_points))
-        o3d_pcd.estimate_normals()
-        o3d.io.write_point_cloud(os.path.join(output_dir, "occupancy_pcd.ply"), o3d_pcd)
+        positions = np.asarray(map_points, dtype=np.float32).reshape(-1, 3)
+        o3d_pcd = o3d.t.geometry.PointCloud()
+        o3d_pcd.point.positions = o3d.core.Tensor(positions, o3d.core.Dtype.Float32)
+
+        if positions.size:
+            legacy_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(map_points))
+            legacy_pcd.estimate_normals()
+            o3d_pcd.point.normals = o3d.core.Tensor(
+                np.asarray(legacy_pcd.normals, dtype=np.float32), o3d.core.Dtype.Float32
+            )
+
+        intensity_array = np.asarray(
+            getattr(self, "occupied_voxel_intensities", np.array([], dtype=np.float32)),
+            dtype=np.float32,
+        )
+        if intensity_array.size and intensity_array.shape[0] == positions.shape[0]:
+            if np.all(np.isfinite(intensity_array)):
+                o3d_pcd.point.intensity = o3d.core.Tensor(
+                    intensity_array.reshape(-1, 1), o3d.core.Dtype.Float32
+                )
+
+        o3d.t.io.write_point_cloud(os.path.join(output_dir, "occupancy_pcd.ply"), o3d_pcd)
         self.occupancy_mapping_pipeline._save_occupancy_volume(
             os.path.join(output_dir, "occupancy_grid_bonxai.bin")
         )
