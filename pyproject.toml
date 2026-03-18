@@ -37,6 +37,8 @@ classifiers = [
 ]
 dependencies = [
     "kiss-icp>=1.2.3",
+    # `--refuse-scans` also needs a MapClosures build exposing
+    # `get_ground_alignment_from_id`; some upstream 2.0.2 builds still predate it.
     "map_closures>=2.0.2",
     "open3d>=0.19.0",
     "numpy",

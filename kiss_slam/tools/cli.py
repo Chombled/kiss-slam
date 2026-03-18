@@ -137,22 +137,26 @@ def kiss_slam(
     # Lazy-loading for faster CLI
     from kiss_icp.datasets import dataset_factory
 
-    from kiss_slam.pipeline import SlamPipeline
+    from kiss_slam.pipeline import RefuseScansCompatibilityError, SlamPipeline
 
-    SlamPipeline(
-        dataset=dataset_factory(
-            dataloader=dataloader,
-            data_dir=data,
-            sequence=sequence,
-            topic=topic,
-            meta=meta,
-        ),
-        config_file=config,
-        visualize=visualize,
-        n_scans=n_scans,
-        jump=jump,
-        refuse_scans=refuse_scans,
-    ).run().print()
+    try:
+        SlamPipeline(
+            dataset=dataset_factory(
+                dataloader=dataloader,
+                data_dir=data,
+                sequence=sequence,
+                topic=topic,
+                meta=meta,
+            ),
+            config_file=config,
+            visualize=visualize,
+            n_scans=n_scans,
+            jump=jump,
+            refuse_scans=refuse_scans,
+        ).run().print()
+    except RefuseScansCompatibilityError as exc:
+        typer.secho(f"Compatibility error: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
 
 
 def run():

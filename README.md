@@ -30,11 +30,15 @@
 pip install kiss-slam
 ```
 
+`--refuse-scans` requires a `map_closures` build that exposes `MapClosures.get_ground_alignment_from_id`. The dependency floor remains `map_closures>=2.0.2`, but the currently published 2.0.2 wheels may still predate that API; if the compatibility check fails, install a newer build from the upstream [MapClosures](https://github.com/PRBonn/MapClosures) repository.
+
 ## Running the system
 Next, follow the instructions on how to run the system by typing:
 ```
 kiss_slam_pipeline --help
 ```
+
+If `--refuse-scans` is enabled in an environment with an older or incompatible `map_closures` build, KISS-SLAM now fails fast with a compatibility error before the long SLAM run starts. You can still run without `--refuse-scans` to export the standard SLAM outputs and local map PLYs, or install a newer upstream `map_closures` build to enable final occupancy/global fusion.
 
 This should print the following help message:
 

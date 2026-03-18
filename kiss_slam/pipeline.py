@@ -22,6 +22,7 @@
 # SOFTWARE.
 import os
 import time
+from importlib import metadata
 from pathlib import Path
 from typing import Optional
 
@@ -34,6 +35,22 @@ from kiss_slam.config import load_config
 from kiss_slam.occupancy_mapper import OccupancyGridMapper
 from kiss_slam.slam import KissSLAM
 from kiss_slam.tools.visualizer import RegistrationVisualizer, StubVisualizer
+
+
+MAP_CLOSURES_RELEASE_FLOOR = "2.0.2"
+
+
+class RefuseScansCompatibilityError(RuntimeError):
+    """Raised when the installed MapClosures build cannot support final fusion."""
+
+
+def _installed_map_closures_version() -> Optional[str]:
+    for distribution_name in ("map_closures", "map-closures"):
+        try:
+            return metadata.version(distribution_name)
+        except metadata.PackageNotFoundError:
+            continue
+    return None
 
 
 class SlamPipeline(OdometryPipeline):
@@ -53,6 +70,31 @@ class SlamPipeline(OdometryPipeline):
         self.kiss_slam = KissSLAM(self.slam_config)
         self.visualizer = RegistrationVisualizer() if self.visualize else StubVisualizer()
         self.refuse_scans = refuse_scans
+        self._validate_refuse_scans_support()
+
+    def _validate_refuse_scans_support(self):
+        if not self.refuse_scans:
+            return
+
+        detector = self.kiss_slam.closer.detector
+        if hasattr(detector, "get_ground_alignment_from_id"):
+            return
+
+        detected_version = _installed_map_closures_version()
+        version_suffix = (
+            f"Detected map_closures version: {detected_version}."
+            if detected_version
+            else "The installed map_closures version could not be determined."
+        )
+        raise RefuseScansCompatibilityError(
+            "`--refuse-scans` requires `MapClosures.get_ground_alignment_from_id`, "
+            f"but the installed MapClosures build does not expose it. {version_suffix} "
+            f"The current release floor is map_closures>={MAP_CLOSURES_RELEASE_FLOOR}, but "
+            "some published 2.0.2 builds still predate this API. Install a newer build from "
+            "the upstream MapClosures repository, or rerun without `--refuse-scans` if you "
+            "only need the standard SLAM outputs and local map PLY exports; final "
+            "occupancy/global fusion depends on the newer ground-alignment API."
+        )
 
     def run(self):
         self._run_pipeline()
