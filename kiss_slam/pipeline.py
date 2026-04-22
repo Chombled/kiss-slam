@@ -72,8 +72,18 @@ class SlamPipeline(OdometryPipeline):
         self.refuse_scans = refuse_scans
         self._validate_refuse_scans_support()
 
+    def _occupancy_outputs_enabled(self) -> bool:
+        occupancy_config = self.slam_config.occupancy_mapper
+        return any(
+            (
+                getattr(occupancy_config, "export_ply", True),
+                getattr(occupancy_config, "export_2d_map", True),
+                getattr(occupancy_config, "export_bonxai_volume", True),
+            )
+        )
+
     def _validate_refuse_scans_support(self):
-        if not self.refuse_scans:
+        if not self.refuse_scans or not self._occupancy_outputs_enabled():
             return
 
         detector = self.kiss_slam.closer.detector
@@ -125,8 +135,12 @@ class SlamPipeline(OdometryPipeline):
 
     def _global_mapping(self):
         if self.refuse_scans:
+            if not self._occupancy_outputs_enabled():
+                return
+
             from kiss_icp.preprocess import get_preprocessor
 
+            occupancy_config = self.slam_config.occupancy_mapper
             if hasattr(self._dataset, "reset"):
                 self._dataset.reset()
             ref_ground_alignment = self.kiss_slam.closer.detector.get_ground_alignment_from_id(0)
@@ -147,13 +161,15 @@ class SlamPipeline(OdometryPipeline):
                     deskewed_scan, ref_ground_alignment @ self.poses[idx - self._first]
                 )
             occupancy_grid_mapper.compute_3d_occupancy_information()
-            occupancy_grid_mapper.compute_2d_occupancy_information()
             occupancy_dir = os.path.join(self.results_dir, "occupancy_grid")
             os.makedirs(occupancy_dir, exist_ok=True)
-            occupancy_grid_mapper.write_3d_occupancy_grid(occupancy_dir)
-            occupancy_2d_map_dir = os.path.join(occupancy_dir, "map2d")
-            os.makedirs(occupancy_2d_map_dir, exist_ok=True)
-            occupancy_grid_mapper.write_2d_occupancy_grid(occupancy_2d_map_dir)
+            if occupancy_config.export_ply or occupancy_config.export_bonxai_volume:
+                occupancy_grid_mapper.write_3d_occupancy_grid(occupancy_dir)
+            if occupancy_config.export_2d_map:
+                occupancy_grid_mapper.compute_2d_occupancy_information()
+                occupancy_2d_map_dir = os.path.join(occupancy_dir, "map2d")
+                os.makedirs(occupancy_2d_map_dir, exist_ok=True)
+                occupancy_grid_mapper.write_2d_occupancy_grid(occupancy_2d_map_dir)
 
     def _write_local_maps(self):
         local_maps_dir = os.path.join(self.results_dir, "local_maps")

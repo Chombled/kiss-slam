@@ -62,6 +62,10 @@ class OccupancyMapperConfig(BaseModel):
     max_range: Optional[float] = None
     z_min: float = 0.1
     z_max: float = 0.5
+    export_ply: bool = True
+    export_2d_map: bool = True
+    export_bonxai_volume: bool = True
+    export_normals: bool = True
 
 
 class PoseGraphOptimizerConfig(BaseModel):
